@@ -1,0 +1,126 @@
+openapi: 3.0.3
+info:
+  title: User Service API
+  version: 1.0.0
+  description: CityBike 用户服务 - 管理账户、认证与身份操作
+
+servers:
+  - url: http://localhost:3001
+    description: 本地开发环境（通过 API Gateway 或直接访问）
+
+paths:
+  /register:
+    post:
+      summary: 用户注册（公开端点）
+      tags: [Public]
+      security: []  
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /login:
+    post:
+      summary: 用户登录（返回 JWT）
+      tags: [Public]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: 认证失败
+
+  /profile:
+    get:
+      summary: 获取当前用户信息（受保护端点）
+      tags: [Internal]
+      security:
+        - jwtAuth: []
+        - mTLSAuth: []
+      responses:
+        '200':
+          description: 用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: 未认证或 token 无效
+        '403':
+          description: 无权限访问
+
+components:
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password, fullName]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        fullName: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string }
+        password: { type: string }
+
+    AuthResponse:
+      type: object
+      properties:
+        token: { type: string }
+        userId: { type: string }
+        expiresIn: { type: integer }
+
+    UserProfile:
+      type: object
+      properties:
+        userId: { type: string }
+        email: { type: string }
+        fullName: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    Error:
+      type: object
+      properties:
+        code: { type: integer }
+        message: { type: string }
+
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "TB1: 公众用户通过 API Gateway 使用 JWT 认证"
+
+    mTLSAuth:
+      type: apiKey
+      in: header
+      name: X-Internal-Auth
+      description: "TB2: 内部服务间 mTLS 双向证书认证（由 API Gateway 或其他内部服务强制传输层认证）"

@@ -1,0 +1,124 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  version: 1.0.0
+  description: CityBike 支付服务 - 处理收费、退款与内部计费（最高敏感级，仅内部 mTLS 调用）
+
+servers:
+  - url: http://localhost:3004
+    description: 本地开发环境（仅接受内部 mTLS 调用）
+
+paths:
+  /payments/charge:
+    post:
+      summary: 根据骑行结束事件收取费用（Ride Service 调用）
+      tags: [Internal]
+      security:
+        - mTLSAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChargeRequest'
+      responses:
+        '201':
+          description: 收费成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: 参数错误或余额不足
+        '403':
+          description: mTLS 认证失败或信任边界违规
+
+  /payments/refund:
+    post:
+      summary: 处理退款请求（内部调用）
+      tags: [Internal]
+      security:
+        - mTLSAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+      responses:
+        '200':
+          description: 退款成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '404':
+          description: 原支付记录不存在
+
+  /payments/{paymentId}:
+    get:
+      summary: 查询支付记录详情（内部审计调用）
+      tags: [Internal]
+      security:
+        - mTLSAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 支付详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentDetails'
+
+components:
+  schemas:
+    ChargeRequest:
+      type: object
+      required: [rideId, userId, amount]
+      properties:
+        rideId: { type: string }
+        userId: { type: string }
+        amount: { type: number, minimum: 0 }
+        currency: { type: string, default: "CNY" }
+
+    RefundRequest:
+      type: object
+      required: [paymentId, reason]
+      properties:
+        paymentId: { type: string }
+        reason: { type: string, enum: [user_cancelled, system_error, overcharge] }
+
+    PaymentResponse:
+      type: object
+      properties:
+        paymentId: { type: string }
+        status: { type: string, enum: [success, failed, refunded] }
+        amount: { type: number }
+        timestamp: { type: string, format: date-time }
+
+    PaymentDetails:
+      type: object
+      properties:
+        paymentId: { type: string }
+        rideId: { type: string }
+        userId: { type: string }
+        amount: { type: number }
+        status: { type: string }
+        transactionId: { type: string }
+
+    Error:
+      type: object
+      properties:
+        code: { type: integer }
+        message: { type: string }
+
+  securitySchemes:
+    mTLSAuth:
+      type: apiKey
+      in: header
+      name: X-Internal-Auth
+      description: "TB2: 内部服务间 mTLS 双向证书认证（仅 Ride Service / User Service 等内部服务可调用）"

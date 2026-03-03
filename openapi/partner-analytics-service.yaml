@@ -1,0 +1,116 @@
+openapi: 3.0.3
+info:
+  title: Partner Analytics Service API
+  version: 1.0.0
+  description: CityBike 伙伴分析服务 - 向授权外部伙伴暴露聚合非个人数据（TB4）
+
+servers:
+  - url: http://localhost:3005
+    description: 本地开发环境（外部伙伴通过 API Gateway 调用）
+
+paths:
+  /analytics/rides-summary:
+    get:
+      summary: 获取骑行统计摘要（伙伴专用）
+      tags: [Analytics]
+      security:
+        - apiKeyAuth: []
+        - mTLSAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: endDate
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: 骑行统计数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RidesSummary'
+        '403':
+          description: API Key 无效或权限不足
+
+  /analytics/usage-stats:
+    get:
+      summary: 获取城市级使用率统计（聚合数据）
+      tags: [Analytics]
+      security:
+        - apiKeyAuth: []
+        - mTLSAuth: []
+      responses:
+        '200':
+          description: 使用率统计
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageStats'
+
+  /analytics/export:
+    post:
+      summary: 请求数据导出（内部审计或授权伙伴）
+      tags: [Internal]
+      security:
+        - mTLSAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '202':
+          description: 导出任务已创建
+
+components:
+  schemas:
+    RidesSummary:
+      type: object
+      properties:
+        totalRides: { type: integer }
+        totalDurationMinutes: { type: integer }
+        averageRideDistanceKm: { type: number }
+        period: { type: string }
+
+    UsageStats:
+      type: object
+      properties:
+        activeBikes: { type: integer }
+        utilizationRate: { type: number }
+        topDocks:
+          type: array
+          items:
+            type: object
+            properties:
+              dockId: { type: string }
+              usageCount: { type: integer }
+
+    ExportRequest:
+      type: object
+      required: [format, dateRange]
+      properties:
+        format: { type: string, enum: [csv, json] }
+        dateRange: { type: object, properties: { start: {type: string, format: date}, end: {type: string, format: date} } }
+
+    Error:
+      type: object
+      properties:
+        code: { type: integer }
+        message: { type: string }
+
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: "TB4: 外部合作伙伴通过 API Gateway 使用 API Key 访问"
+
+    mTLSAuth:
+      type: apiKey
+      in: header
+      name: X-Internal-Auth
+      description: "TB2: 内部服务间 mTLS 双向证书认证（内部审计或服务间调用）"

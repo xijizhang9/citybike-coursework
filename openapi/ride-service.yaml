@@ -1,0 +1,139 @@
+openapi: 3.0.3
+info:
+  title: Ride Service API
+  version: 1.0.0
+  description: CityBike 骑行服务 - 协调开始/结束骑行、记录骑行数据（核心业务服务）
+
+servers:
+  - url: http://localhost:3002
+    description: 本地开发环境（必须通过 API Gateway 或 mTLS 调用）
+
+paths:
+  /rides/start:
+    post:
+      summary: 开始一次新的骑行（用户必须已登录）
+      tags: [Ride]
+      security:
+        - jwtAuth: []
+        - mTLSAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartRideRequest'
+      responses:
+        '201':
+          description: 骑行成功开始
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideResponse'
+        '400':
+          description: 参数错误或自行车不可用
+        '401':
+          description: 未认证
+        '403':
+          description: 无权限或信任边界验证失败
+
+  /rides/{rideId}/end:
+    post:
+      summary: 结束骑行并记录数据
+      tags: [Ride]
+      security:
+        - jwtAuth: []
+        - mTLSAuth: []
+      parameters:
+        - name: rideId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndRideRequest'
+      responses:
+        '200':
+          description: 骑行结束成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideResponse'
+        '404':
+          description: 骑行记录不存在
+
+  /rides/{rideId}:
+    get:
+      summary: 查询单次骑行详情（内部服务调用）
+      tags: [Internal]
+      security:
+        - mTLSAuth: []
+      parameters:
+        - name: rideId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 骑行详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideDetails'
+
+components:
+  schemas:
+    StartRideRequest:
+      type: object
+      required: [bikeId, dockId]
+      properties:
+        bikeId: { type: string }
+        dockId: { type: string }
+        userLocation: { type: object, properties: { lat: {type: number}, lng: {type: number} } }
+
+    EndRideRequest:
+      type: object
+      required: [dockId]
+      properties:
+        dockId: { type: string }
+        endLocation: { type: object, properties: { lat: {type: number}, lng: {type: number} } }
+
+    RideResponse:
+      type: object
+      properties:
+        rideId: { type: string }
+        status: { type: string, enum: [started, ended] }
+        startTime: { type: string, format: date-time }
+        message: { type: string }
+
+    RideDetails:
+      type: object
+      properties:
+        rideId: { type: string }
+        userId: { type: string }
+        bikeId: { type: string }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        durationMinutes: { type: integer }
+        cost: { type: number }
+
+    Error:
+      type: object
+      properties:
+        code: { type: integer }
+        message: { type: string }
+
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "TB1: 用户 JWT（通过 API Gateway 传递）"
+
+    mTLSAuth:
+      type: apiKey
+      in: header
+      name: X-Internal-Auth
+      description: "TB2: 内部服务间 mTLS 双向证书认证（Ride Service 被 Gateway / User / Payment / Inventory 调用时使用）"

@@ -1,0 +1,125 @@
+openapi: 3.0.3
+info:
+  title: Bike Inventory Service API
+  version: 1.0.0
+  description: CityBike 自行车库存服务 - 跟踪车辆与车桩可用性，接收 IoT 设备上报（TB3）
+
+servers:
+  - url: http://localhost:3003
+    description: 本地开发环境（IoT 设备与内部服务调用）
+
+paths:
+  /inventory/update:
+    post:
+      summary: IoT 设备上报自行车/车桩状态（设备专用端点）
+      tags: [Device]
+      security:
+        - hmacAuth: []
+        - mTLSAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceUpdateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResponse'
+        '401':
+          description: HMAC 验证失败
+        '400':
+          description: 参数错误
+
+  /bikes/available:
+    get:
+      summary: 查询可用自行车（内部服务调用）
+      tags: [Internal]
+      security:
+        - mTLSAuth: []
+      responses:
+        '200':
+          description: 可用车辆列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailableBikes'
+
+  /docks/status:
+    get:
+      summary: 查询所有车桩状态（内部调用）
+      tags: [Internal]
+      security:
+        - mTLSAuth: []
+      responses:
+        '200':
+          description: 车桩状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DockStatusList'
+
+components:
+  schemas:
+    DeviceUpdateRequest:
+      type: object
+      required: [deviceId, bikeId, status, location]
+      properties:
+        deviceId: { type: string }
+        bikeId: { type: string }
+        status: { type: string, enum: [available, in_use, maintenance, returned] }
+        location: { type: object, properties: { lat: {type: number}, lng: {type: number} } }
+        timestamp: { type: string, format: date-time }
+
+    UpdateResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        inventoryUpdatedAt: { type: string, format: date-time }
+
+    AvailableBikes:
+      type: object
+      properties:
+        bikes: 
+          type: array
+          items:
+            type: object
+            properties:
+              bikeId: { type: string }
+              status: { type: string }
+              dockId: { type: string }
+
+    DockStatusList:
+      type: object
+      properties:
+        docks:
+          type: array
+          items:
+            type: object
+            properties:
+              dockId: { type: string }
+              availableSlots: { type: integer }
+              status: { type: string }
+
+    Error:
+      type: object
+      properties:
+        code: { type: integer }
+        message: { type: string }
+
+  securitySchemes:
+    hmacAuth:
+      type: apiKey
+      in: header
+      name: X-HMAC-Signature
+      description: "TB3: IoT 设备上报使用 HMAC 签名认证（设备完整性保护）"
+
+    mTLSAuth:
+      type: apiKey
+      in: header
+      name: X-Internal-Auth
+      description: "TB2: 内部服务间 mTLS 双向证书认证（Ride / Payment 等服务调用时使用）"
