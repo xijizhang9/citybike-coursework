@@ -32,10 +32,10 @@ jobs:
           swagger-cli validate openapi/partner-analytics-service.yaml
 
       - name: Build all Docker services
-        run: docker-compose build
+        run: docker compose build
 
       - name: Start services in background
-        run: docker-compose up -d
+        run: docker compose up -d
 
       - name: Wait for services to be ready
         run: sleep 10
@@ -50,4 +50,4 @@ jobs:
 
       - name: Stop services
         if: always()
-        run: docker-compose down
+        run: docker compose down
